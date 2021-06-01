@@ -13,7 +13,6 @@ const int mqtt_port = 1883;
 const char* mqtt_Client = MQTT_CLIENT;
 const char* mqtt_username = MQTT_USER;
 const char* mqtt_password = MQTT_PASSWD;
-int count = 0;
 const char* a = "a";
 
 WiFiClient espClient;
@@ -31,7 +30,7 @@ void parse_data(String payload){
     Serial.println(err.c_str());
   }
   const char* deviceid = doc["deviceid"]; // "8bfec1ab-4b2b-447e-b478-534121c84b26"
-  Serial.println(deviceid);
+//  Serial.println(deviceid);
   JsonObject data = doc["data"];
   bool airconOn = data["airconOn"];
   int airconTemp = data["airconTemp"];
@@ -41,14 +40,22 @@ void parse_data(String payload){
   bool light3 = data["light3"];
   bool light4 = data["light4"];
   bool light5 = data["light5"];
-  Serial.println(airconOn);
-  Serial.println(airconTemp);
-  Serial.println(cap);
-  Serial.println(light1);
-  Serial.println(light2);
-  Serial.println(light3);
-  Serial.println(light4);
-  Serial.println(light5); 
+//  Serial.println(airconOn);
+//  Serial.println(airconTemp);
+//  Serial.println(cap);
+//  Serial.println(light1);
+//  Serial.println(light2);
+//  Serial.println(light3);
+//  Serial.println(light4);
+//  Serial.println(light5);
+
+  char out[50];
+  char len[10];
+  sprintf(out, "%d,%d,%d,%d,%d,%d,%d,%d", cap, airconOn, airconTemp, light1,light2,light3,light4,light5);
+  sprintf(len, "%02d", strlen(out));
+  Serial.write(len, 2);
+  delay(250);
+  Serial.write(out, strlen(out));
 
 }
 void get_data(){
@@ -62,18 +69,19 @@ void get_data(){
  
       String payload = http.getString();   
       parse_data(payload);
-      Serial.println(payload);           
+//      Serial.println(payload);           
  
     }
  
     http.end();   //Close connection
 }
 
+
 void reconnect() {
     while (!client.connected()) {
         Serial.print("Attempting MQTT connection…");
         if (client.connect(mqtt_Client, mqtt_username, mqtt_password)) {
-            Serial.println("connected");
+//            Serial.println("connected");
             client.subscribe("@msg/frontendtodevice");
         } else {
             Serial.print("failed, rc=");
@@ -85,14 +93,14 @@ void reconnect() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("] ");
+//    Serial.print("Message arrived [");
+//    Serial.print(topic);
+//    Serial.print("] ");
     String message;
     for (int i = 0; i < length; i++) {
         message = message + (char)payload[i];
     }
-    Serial.println(message);
+//    Serial.println(message);
     get_data();
     
     
@@ -119,13 +127,13 @@ void setup() {
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(".");
+//        Serial.print(".");
     }
-    Serial.println("");
-    Serial.println("WiFi connected");
-
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+//    Serial.println("");
+//    Serial.println("WiFi connected");
+//
+//    Serial.println("IP address: ");
+//    Serial.println(WiFi.localIP());
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
     
@@ -137,15 +145,20 @@ void loop() {
         reconnect();
     }
     client.loop();
-    String data = "{\"data\": {\"count\":" + String(count) +", \"changeId\":" + String(0) +"}}";
+    String count;
+    if (Serial.available()){
+      count = Serial.readString();
+//      Serial.println(s);
+    }
+    String data = "{\"data\": {\"count\":" + count +", \"changeId\":" + String(0) +"}}";
 //    String changeID = "{\"data\": {\"changeId\":" + String(0) +"}}";
-    Serial.println(data);
+//    Serial.println(data);
 //    Serial.println(changeID);
     data.toCharArray(msg, (data.length() + 1));
     client.publish("@shadow/data/update", msg);
 //    data.toCharArray(msg, (changeID.length() + 1));
 //    client.publish("@shadow/data/update", msg);
     client.publish("@msg/devicetofrontend", a);
-    count = count + 1;
+//    count = count + 1;
     delay(2000);
 }
