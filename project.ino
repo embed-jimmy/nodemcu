@@ -14,13 +14,14 @@ const char* mqtt_Client = MQTT_CLIENT;
 const char* mqtt_username = MQTT_USER;
 const char* mqtt_password = MQTT_PASSWD;
 const char* a = "a";
+int prevZero = 0;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
-char msg[50];
+char msg[256];
 
 void parse_data(String payload){
-  
+  // parse json to object
   const int capacity = JSON_OBJECT_SIZE(2*JSON_OBJECT_SIZE(4));
   StaticJsonDocument<capacity> doc;
 
@@ -30,7 +31,7 @@ void parse_data(String payload){
     Serial.println(err.c_str());
   }
   const char* deviceid = doc["deviceid"]; // "8bfec1ab-4b2b-447e-b478-534121c84b26"
-//  Serial.println(deviceid);
+
   JsonObject data = doc["data"];
   bool airconOn = data["airconOn"];
   int airconTemp = data["airconTemp"];
@@ -40,15 +41,9 @@ void parse_data(String payload){
   bool light3 = data["light3"];
   bool light4 = data["light4"];
   bool light5 = data["light5"];
-//  Serial.println(airconOn);
-//  Serial.println(airconTemp);
-//  Serial.println(cap);
-//  Serial.println(light1);
-//  Serial.println(light2);
-//  Serial.println(light3);
-//  Serial.println(light4);
-//  Serial.println(light5);
 
+  // send data to the device
+  
   char out[50];
   char len[10];
   sprintf(out, "%d,%d,%d,%d,%d,%d,%d,%d", cap, airconOn, airconTemp, light1,light2,light3,light4,light5);
@@ -59,6 +54,7 @@ void parse_data(String payload){
 
 }
 void get_data(){
+  // get data from the server
     HTTPClient http;  
  
     http.begin("http://api.netpie.io/v2/device/shadow/data");  
@@ -66,11 +62,8 @@ void get_data(){
     int httpCode = http.GET();                                 
  
     if (httpCode > 0) { 
- 
       String payload = http.getString();   
-      parse_data(payload);
-//      Serial.println(payload);           
- 
+      parse_data(payload);  
     }
  
     http.end();   //Close connection
@@ -79,9 +72,7 @@ void get_data(){
 
 void reconnect() {
     while (!client.connected()) {
-        Serial.print("Attempting MQTT connection…");
         if (client.connect(mqtt_Client, mqtt_username, mqtt_password)) {
-//            Serial.println("connected");
             client.subscribe("@msg/frontendtodevice");
         } else {
             Serial.print("failed, rc=");
@@ -93,29 +84,12 @@ void reconnect() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-//    Serial.print("Message arrived [");
-//    Serial.print(topic);
-//    Serial.print("] ");
+  // for upcoming message when subscribe
     String message;
     for (int i = 0; i < length; i++) {
         message = message + (char)payload[i];
     }
-//    Serial.println(message);
     get_data();
-    
-    
-//    if(String(topic) == "@msg/led") {
-//        if(message == "on"){
-//            digitalWrite(LED1,0);
-//            client.publish("@shadow/data/update", "{\"data\" : {\"led\" : \"on\"}}");
-//            Serial.println("LED on");
-//        }
-//        else if (message == "off"){
-//            digitalWrite(LED1,1);
-//            client.publish("@shadow/data/update", "{\"data\" : {\"led\" : \"off\"}}");
-//            Serial.println("LED off");
-//        }
-//    }
 }
 
 void setup() {
@@ -127,17 +101,12 @@ void setup() {
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-//        Serial.print(".");
     }
-//    Serial.println("");
-//    Serial.println("WiFi connected");
-//
-//    Serial.println("IP address: ");
-//    Serial.println(WiFi.localIP());
+
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
-    
- 
+
+     
 }
 
 void loop() {
@@ -148,17 +117,33 @@ void loop() {
     String count;
     if (Serial.available()){
       count = Serial.readString();
-//      Serial.println(s);
+      // count -1 mean the board request the data
+      if (count == "-1"){
+        get_data();
+        count = "0";
+      }
+      else if (count == "0"){
+        prevZero = 1;
+        // auto close
+        String data = "{\"data\": {\"count\":" + count +", \"changeId\":" + String(0) +",\"airconOn\":false,\"light1\":false,\"light2\":false,\"light3\":false,\"light4\":false,\"light5\":false}}";
+        data.toCharArray(msg, (data.length() + 1));
+        client.publish("@shadow/data/update", msg);
+        client.publish("@msg/devicetofrontend", a);
+      }
+      else if (count == "1" && prevZero){
+        // auto open
+        String data = "{\"data\": {\"count\":" + count +", \"changeId\":" + String(0) +",\"airconOn\":true,\"light1\":true,\"light2\":true,\"light3\":true,\"light4\":true,\"light5\":true}}";
+        data.toCharArray(msg, (data.length() + 1));
+        client.publish("@shadow/data/update", msg);
+        client.publish("@msg/devicetofrontend", a);
+        prevZero = 0;
+      }else{
+        String data = "{\"data\": {\"count\":" + count +", \"changeId\":" + String(0) +"}}";
+        data.toCharArray(msg, (data.length() + 1));
+        client.publish("@shadow/data/update", msg);
+        client.publish("@msg/devicetofrontend", a);
+        prevZero = 0;
+      }
+      }
+      delay(500);
     }
-    String data = "{\"data\": {\"count\":" + count +", \"changeId\":" + String(0) +"}}";
-//    String changeID = "{\"data\": {\"changeId\":" + String(0) +"}}";
-//    Serial.println(data);
-//    Serial.println(changeID);
-    data.toCharArray(msg, (data.length() + 1));
-    client.publish("@shadow/data/update", msg);
-//    data.toCharArray(msg, (changeID.length() + 1));
-//    client.publish("@shadow/data/update", msg);
-    client.publish("@msg/devicetofrontend", a);
-//    count = count + 1;
-    delay(2000);
-}
